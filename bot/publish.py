@@ -109,7 +109,14 @@ async def publish_post(post: dict) -> None:
     """
     bot = Bot(token=BOT_TOKEN)
     text = post["rewritten_text"]
-    media_type = get_media_type(post.get("media_path"))
+    media_path = post.get("media_path")
+
+    print(f"[DEBUG] post_id    = {post.get('id')}")
+    print(f"[DEBUG] media_path = {media_path}")
+    print(f"[DEBUG] file_exists= {os.path.isfile(media_path) if media_path else 'N/A'}")
+    print(f"[DEBUG] text       = {(text or '')[:80]}")
+
+    media_type = get_media_type(media_path)
 
     async with bot:
         # ── 1. Публікація тексту (з медіа або без) ──────────────────────────
@@ -132,8 +139,8 @@ async def publish_post(post: dict) -> None:
             print(f"🎬 Опубліковано з відео: {post['media_path']}")
 
         else:
-            if post.get("media_path") and media_type == "none":
-                print(f"⚠️  Медіафайл не знайдено: {post['media_path']} — публікуємо тільки текст.")
+            if media_path and media_type == "none":
+                print(f"⚠️  Медіафайл не знайдено на диску: {media_path} — публікуємо тільки текст.")
             await bot.send_message(
                 chat_id=CHANNEL_ID,
                 text=text,

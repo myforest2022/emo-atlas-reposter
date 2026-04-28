@@ -257,6 +257,7 @@ def remove_media(db_id: int):
 @app.route("/post/<int:db_id>/upload-media", methods=["POST"])
 def upload_media(db_id: int):
     """Завантажує нове фото для посту, зберігає в media/ і оновлює media_path в БД."""
+    os.makedirs(MEDIA_DIR, exist_ok=True)
     if "file" not in request.files:
         return jsonify({"ok": False, "error": "Файл не знайдено"}), 400
     file = request.files["file"]
@@ -307,6 +308,36 @@ def save_text(db_id: int):
         )
         conn.commit()
     return jsonify({"ok": True})
+
+
+@app.route("/my-channel/post", methods=["POST"])
+def my_channel_post():
+    """
+    Зберігає новий пост написаний вручну для власного каналу (@emo_atlas_ua).
+    Приймає JSON: {"text": "...", "poll_question": "...", "poll_options": [...]}.
+    Повертає: {"ok": true, "id": <db_id>}.
+    """
+    import datetime
+    data = request.get_json() or {}
+    text          = (data.get("text") or "").strip()
+    poll_question = (data.get("poll_question") or "").strip() or None
+    opts_list     = data.get("poll_options") or []
+    poll_options  = "|||".join(o.strip() for o in opts_list if o.strip()) or None
+
+    if not text:
+        return jsonify({"ok": False, "error": "Текст порожній"}), 400
+
+    now = datetime.datetime.now().isoformat(timespec="seconds")
+    with get_connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO posts (channel, original_text, rewritten_text, status, date, poll_question, poll_options) "
+            "VALUES (?, ?, ?, 'переписаний', ?, ?, ?)",
+            ("@emo_atlas_ua", text, text, now, poll_question, poll_options),
+        )
+        conn.commit()
+        db_id = cur.lastrowid
+
+    return jsonify({"ok": True, "id": db_id})
 
 
 @app.route("/post/<int:db_id>/rewrite", methods=["POST"])

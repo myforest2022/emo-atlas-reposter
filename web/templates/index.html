@@ -417,6 +417,8 @@
 let currentChannel    = null;
 let currentPostId     = null;
 let currentPostStatus = null;
+let isMyChannel       = false;
+let myChPendingFile   = null;   // фото вибране у блоці "Мій канал" — зберігається при doSaveMyChannel
 const postsCache = new Map();   // id → post object
 
 // ── CHANNELS ──────────────────────────────────────────────────────────────────
@@ -510,6 +512,7 @@ async function removeChannel(event, channel) {
 function myChSelectPhoto(input) {
   const file = input.files[0];
   if (!file) return;
+  myChPendingFile = file;
   const url = URL.createObjectURL(file);
   const preview = document.getElementById('myChPreview');
   preview.src = url;
@@ -519,6 +522,7 @@ function myChSelectPhoto(input) {
 }
 
 function myChRemovePhoto() {
+  myChPendingFile = null;
   const preview = document.getElementById('myChPreview');
   preview.src = '';
   preview.style.display = 'none';
@@ -529,6 +533,8 @@ function myChRemovePhoto() {
 function myChOpenEditor() {
   currentPostId     = null;
   currentPostStatus = null;
+  isMyChannel       = true;
+  myChPendingFile   = null;
   document.getElementById('editorLabel').innerHTML =
     '<span class="ed-channel">Мій канал</span> · <span class="ed-meta">@emo_atlas_ua</span>';
   const ta = document.getElementById('editorTextarea');
@@ -693,8 +699,9 @@ function openCardInEditor(id) {
 function syncEditorBtns() {
   const hasId      = currentPostId !== null;
   const isRewritten = currentPostStatus === 'переписаний';
+  const hasText    = document.getElementById('editorTextarea').value.trim().length > 0;
   document.getElementById('btnRewrite').disabled = !hasId;
-  document.getElementById('btnSave').disabled    = !hasId;
+  document.getElementById('btnSave').disabled    = isMyChannel ? !hasText : !hasId;
   document.getElementById('btnPublish').disabled = !(hasId && isRewritten);
 }
 
@@ -731,6 +738,7 @@ async function doRewrite() {
 }
 
 async function doSave() {
+  if (isMyChannel) { await doSaveMyChannel(); return; }
   if (!currentPostId) return;
   const btn  = document.getElementById('btnSave');
   const orig = btn.textContent;
@@ -757,8 +765,51 @@ async function doSave() {
   } finally { setLoading(btn, false, orig); }
 }
 
+async function doSaveMyChannel() {
+  const btn  = document.getElementById('btnSave');
+  const orig = btn.textContent;
+  setLoading(btn, true, '...');
+  try {
+    const text          = document.getElementById('editorTextarea').value;
+    const poll_question = document.getElementById('pollQuestion').value.trim();
+    const poll_options  = ['pollOpt1','pollOpt2','pollOpt3','pollOpt4']
+      .map(i => document.getElementById(i).value.trim()).filter(Boolean);
+
+    const data = await apiPost('/my-channel/post', { text, poll_question, poll_options });
+    if (data.ok) {
+      // Якщо користувач вибрав фото — завантажуємо його на сервер
+      if (myChPendingFile) {
+        const fd = new FormData();
+        fd.append('file', myChPendingFile);
+        try {
+          const upRes  = await fetch(`/post/${data.id}/upload-media`, { method:'POST', body:fd });
+          const upData = await upRes.json();
+          if (upData.ok) {
+            myChPendingFile = null;
+          } else {
+            toast('Текст збережено, але фото не завантажилось: ' + (upData.error || ''), 'error');
+          }
+        } catch {
+          toast('Текст збережено, але помилка завантаження фото', 'error');
+        }
+      }
+      currentPostId     = data.id;
+      currentPostStatus = 'переписаний';
+      isMyChannel       = false;
+      document.getElementById('editorLabel').innerHTML =
+        '<span class="ed-channel">Мій канал</span>' +
+        ' · <span class="badge-status rewritten">переписаний</span>';
+      syncEditorBtns();
+      toast('Збережено', 'success');
+    } else {
+      toast(data.error || 'Помилка збереження', 'error');
+    }
+  } finally { setLoading(btn, false, orig); }
+}
+
 function doCancel() {
   currentPostId = currentPostStatus = null;
+  isMyChannel = false;
   const ta = document.getElementById('editorTextarea');
   ta.value = ''; ta.readOnly = true;
   document.getElementById('editorLabel').innerHTML = '<span class="ed-placeholder">Нічого не вибрано</span>';
@@ -885,6 +936,7 @@ function toast(msg, type='success') {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('editorTextarea').addEventListener('input', syncEditorBtns);
   const first = document.querySelector('.channel-item');
   if (first) first.click();
 });
