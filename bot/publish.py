@@ -118,25 +118,33 @@ async def publish_post(post: dict) -> None:
 
     media_type = get_media_type(media_path)
 
+    CAPTION_LIMIT = 1024
+
     async with bot:
         # ── 1. Публікація тексту (з медіа або без) ──────────────────────────
         if media_type == "photo":
-            with open(post["media_path"], "rb") as photo:
-                await bot.send_photo(
-                    chat_id=CHANNEL_ID,
-                    photo=photo,
-                    caption=text,
-                )
-            print(f"📷 Опубліковано з фото: {post['media_path']}")
+            with open(media_path, "rb") as photo:
+                if len(text) <= CAPTION_LIMIT:
+                    await bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=text)
+                else:
+                    await bot.send_photo(chat_id=CHANNEL_ID, photo=photo)
+            if len(text) > CAPTION_LIMIT:
+                await bot.send_message(chat_id=CHANNEL_ID, text=text)
+                print(f"📷 Опубліковано фото + текст окремо (>{CAPTION_LIMIT} симв.): {media_path}")
+            else:
+                print(f"📷 Опубліковано з фото: {media_path}")
 
         elif media_type == "video":
-            with open(post["media_path"], "rb") as video:
-                await bot.send_video(
-                    chat_id=CHANNEL_ID,
-                    video=video,
-                    caption=text,
-                )
-            print(f"🎬 Опубліковано з відео: {post['media_path']}")
+            with open(media_path, "rb") as video:
+                if len(text) <= CAPTION_LIMIT:
+                    await bot.send_video(chat_id=CHANNEL_ID, video=video, caption=text)
+                else:
+                    await bot.send_video(chat_id=CHANNEL_ID, video=video)
+            if len(text) > CAPTION_LIMIT:
+                await bot.send_message(chat_id=CHANNEL_ID, text=text)
+                print(f"🎬 Опубліковано відео + текст окремо (>{CAPTION_LIMIT} симв.): {media_path}")
+            else:
+                print(f"🎬 Опубліковано з відео: {media_path}")
 
         else:
             if media_path and media_type == "none":
