@@ -1,0 +1,892 @@
+{% extends "base.html" %}
+{% block title %}ЕмоАтлас · Репостер{% endblock %}
+{% block body %}
+<style>
+/* ══ LAYOUT ══ */
+.app { display:flex; flex-direction:row; height:100vh; overflow:hidden; }
+
+/* ══ COLUMN 1: CHANNELS (200px) ══ */
+.channels-panel {
+  width:200px; flex-shrink:0;
+  background:var(--surface); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.ch-panel-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:11px 10px 8px; flex-shrink:0;
+}
+.logo { font-weight:800; font-size:.95rem; letter-spacing:-.3px; color:var(--text); }
+.logo span { color:var(--accent); }
+.btn-parser {
+  background:var(--accent); color:#fff; border:none; border-radius:6px;
+  padding:4px 9px; font-size:.74rem; font-weight:700; cursor:pointer;
+  transition:opacity .14s; white-space:nowrap; flex-shrink:0;
+}
+.btn-parser:hover { opacity:.85; }
+
+.channels-heading {
+  padding:4px 10px 3px; font-size:.65rem; font-weight:700;
+  text-transform:uppercase; letter-spacing:1.2px; color:var(--text-muted); flex-shrink:0;
+}
+.channels-list { list-style:none; overflow-y:auto; flex:1; padding-bottom:4px; }
+
+.channel-item {
+  display:flex; align-items:center; gap:8px; padding:8px 8px 8px 10px;
+  cursor:pointer; transition:background .12s; position:relative;
+  border-left:3px solid transparent;
+}
+.channel-item:hover { background:var(--card-hover); }
+.channel-item.active { background:var(--accent-glow); border-left-color:var(--accent); }
+.ch-remove {
+  display:none; background:transparent; border:none; color:var(--text-muted);
+  cursor:pointer; font-size:.85rem; padding:2px 4px; border-radius:4px;
+  line-height:1; flex-shrink:0; transition:color .12s;
+}
+.channel-item:hover .ch-remove { display:flex; align-items:center; }
+.ch-remove:hover { color:var(--red); }
+.ch-avatar {
+  width:30px; height:30px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:800; font-size:.78rem; flex-shrink:0; color:#fff;
+}
+.ch-info { flex:1; min-width:0; }
+.ch-name { font-size:.79rem; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ch-meta { font-size:.67rem; color:var(--text-muted); margin-top:1px; }
+.ch-badge {
+  background:var(--accent); color:#fff; font-size:.62rem; font-weight:700;
+  padding:1px 5px; border-radius:999px; flex-shrink:0;
+}
+.add-channel-wrap { flex-shrink:0; border-top:1px solid var(--border); padding:7px 8px; }
+.btn-add-ch {
+  width:100%; background:transparent; border:1px dashed var(--border);
+  color:var(--text-muted); font-size:.76rem; font-weight:600;
+  padding:6px 8px; border-radius:7px; cursor:pointer; transition:all .14s;
+  display:flex; align-items:center; justify-content:center; gap:5px;
+}
+.btn-add-ch:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-glow); }
+.add-ch-form { display:none; margin-top:6px; }
+.add-ch-form.open { display:block; }
+.add-ch-input {
+  width:100%; background:var(--bg); border:1px solid var(--border);
+  border-radius:6px; color:var(--text); font-size:.8rem; padding:6px 8px;
+  outline:none; transition:border-color .14s;
+}
+.add-ch-input:focus { border-color:var(--accent); }
+.add-ch-input::placeholder { color:var(--text-muted); }
+.add-ch-btns { display:flex; gap:5px; margin-top:5px; }
+.btn-xs {
+  display:inline-flex; align-items:center; padding:4px 9px; border-radius:6px;
+  font-size:.73rem; font-weight:600; cursor:pointer; border:none;
+  transition:all .14s; white-space:nowrap;
+}
+.btn-xs:disabled { opacity:.4; cursor:not-allowed; }
+.btn-xs.primary { background:var(--accent); color:#fff; }
+.btn-xs.ghost { background:transparent; border:1px solid var(--border); color:var(--text-dim); }
+
+/* ══ COLUMN 2: POSTS (400px) ══ */
+.posts-panel {
+  width:400px; flex-shrink:0; border-right:1px solid var(--border);
+  overflow-y:scroll; display:flex; flex-direction:column; background:var(--bg);
+}
+
+/* Sticky header inside posts-panel */
+.posts-sticky-header {
+  position:sticky; top:0; z-index:10; background:var(--bg);
+  border-bottom:1px solid var(--border);
+}
+
+/* My channel block */
+.my-channel-block {
+  background:var(--surface); border-bottom:1px solid var(--border);
+  padding:9px 11px; display:flex; flex-direction:column; gap:6px;
+}
+.my-ch-header { display:flex; align-items:center; gap:7px; }
+.my-ch-label {
+  font-size:.65rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:1px; color:var(--text-muted);
+}
+.my-ch-name { font-size:.75rem; font-weight:700; color:var(--accent); }
+.my-ch-row { display:flex; align-items:center; gap:10px; }
+.my-ch-avatar {
+  width:60px; height:60px; border-radius:50%; flex-shrink:0;
+  background:#3a3a5c; display:flex; align-items:center; justify-content:center;
+  font-weight:800; font-size:1.05rem; color:var(--text-muted);
+  letter-spacing:.5px; user-select:none;
+}
+.my-ch-upload-wrap { position:relative; flex-shrink:0; }
+.my-ch-upload-area {
+  width:60px; height:60px; border-radius:8px; flex-shrink:0;
+  border:2px dashed var(--border); background:rgba(255,255,255,.03);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:border-color .14s, background .14s; overflow:hidden;
+}
+.my-ch-upload-area:hover { border-color:var(--accent); background:var(--accent-glow); }
+.my-ch-upload-plus { font-size:1.6rem; color:var(--text-muted); line-height:1; pointer-events:none; }
+.my-ch-preview { width:100%; height:100%; object-fit:cover; display:none; }
+.my-ch-remove-x {
+  position:absolute; top:-6px; right:-6px; width:18px; height:18px;
+  border-radius:50%; background:var(--red); color:#fff; border:none;
+  font-size:.62rem; font-weight:700; cursor:pointer;
+  display:none; align-items:center; justify-content:center; line-height:1; z-index:2;
+}
+.my-ch-remove-x.shown { display:flex; }
+
+/* Posts toolbar */
+.posts-toolbar {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:7px 11px; gap:8px; background:var(--bg);
+}
+.posts-title { font-weight:700; font-size:.84rem; color:var(--text); }
+.btn-rewrite-all {
+  background:linear-gradient(135deg,var(--accent),var(--purple)); color:#fff; border:none;
+  border-radius:6px; padding:4px 11px; font-size:.73rem; font-weight:700;
+  cursor:pointer; transition:opacity .14s; white-space:nowrap;
+}
+.btn-rewrite-all:hover { opacity:.85; }
+
+/* Posts list */
+.posts-list { padding:9px; display:flex; flex-direction:column; gap:7px; }
+
+/* Post card (simplified) */
+.post-card {
+  background:var(--card); border:1px solid var(--border); border-radius:11px;
+  overflow:hidden; transition:border-color .15s;
+}
+.post-card:hover { border-color:rgba(129,140,248,.35); }
+
+.card-header {
+  display:flex; align-items:center; gap:6px; padding:6px 9px;
+  flex-wrap:nowrap; overflow:hidden;
+}
+.card-channel {
+  font-size:.72rem; font-weight:700; color:var(--accent);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100px;
+}
+.card-time { font-size:.67rem; color:var(--text-muted); white-space:nowrap; margin-left:auto; }
+.btn-delete-card {
+  background:transparent; border:none; font-size:.68rem; color:var(--text-muted);
+  cursor:pointer; padding:2px 5px; border-radius:4px; transition:color .12s;
+  white-space:nowrap; line-height:1; flex-shrink:0;
+}
+.btn-delete-card:hover { color:var(--red); }
+
+.card-preview {
+  font-size:.8rem; color:var(--text-dim); line-height:1.5;
+  padding:0 9px 5px; word-break:break-word;
+  overflow:hidden; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical;
+}
+.card-preview.empty { color:var(--text-muted); font-style:italic; }
+
+.card-thumb-wrap { padding:4px 9px 0; }
+.card-thumb { width:120px; height:90px; object-fit:cover; border-radius:7px; border:1px solid var(--border); display:block; }
+.card-video-thumb {
+  display:inline-flex; align-items:center; gap:5px; margin:4px 9px 0;
+  padding:4px 9px; background:var(--border); border-radius:7px;
+  font-size:.72rem; color:var(--text-dim);
+}
+.card-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:5px 9px 8px; }
+
+/* Shared small text-button */
+.btn-text {
+  background:transparent; border:none; color:var(--text-muted);
+  font-size:.73rem; cursor:pointer; padding:0;
+  text-decoration:underline; white-space:nowrap; transition:color .12s; line-height:1.4;
+}
+.btn-text:hover { color:var(--text); }
+.btn-text.accent { color:var(--accent); }
+.btn-text.accent:hover { opacity:.8; }
+.btn-text.red { color:var(--red); }
+.btn-text.red:hover { opacity:.8; }
+
+/* ══ COLUMN 3: EDITOR ══ */
+.editor-panel {
+  flex:1; min-width:0; display:flex; flex-direction:column;
+  overflow:hidden; background:var(--surface); padding:13px 15px; gap:9px;
+}
+.editor-label {
+  font-size:.8rem; color:var(--text-dim); display:flex; align-items:center;
+  gap:7px; flex-wrap:wrap; flex-shrink:0; min-height:22px;
+}
+.ed-channel { font-weight:700; color:var(--accent); }
+.ed-meta { color:var(--text-muted); }
+.ed-placeholder { color:var(--text-muted); font-style:italic; }
+
+.editor-textarea {
+  flex:1; min-height:0; width:100%;
+  background:var(--bg); border:1px solid var(--border); border-radius:10px;
+  color:var(--text); font-size:.87rem; line-height:1.65; padding:11px 13px;
+  resize:none; overflow-y:auto; outline:none; transition:border-color .15s;
+}
+.editor-textarea:focus { border-color:var(--accent); }
+.editor-textarea::placeholder { color:var(--text-muted); }
+.editor-textarea[readonly] { color:var(--text-muted); cursor:default; }
+
+.editor-btns { display:flex; gap:7px; align-items:center; flex-wrap:wrap; flex-shrink:0; }
+.btn-ed {
+  display:inline-flex; align-items:center; padding:6px 15px; border-radius:8px;
+  font-size:.8rem; font-weight:600; cursor:pointer; transition:all .14s;
+  white-space:nowrap; line-height:1;
+}
+.btn-ed:disabled { opacity:.4; cursor:not-allowed; }
+.btn-ed:not(:disabled):active { transform:scale(.96); }
+.btn-ed.rewrite {
+  background:linear-gradient(135deg,var(--accent),var(--purple)); color:#fff; border:none;
+}
+.btn-ed.rewrite:not(:disabled):hover { opacity:.85; }
+.btn-ed.save {
+  background:transparent; border:1.5px solid var(--green); color:var(--green);
+}
+.btn-ed.save:not(:disabled):hover { background:var(--green-dim); }
+.btn-ed.cancel {
+  background:transparent; border:1.5px solid #64748b; color:#64748b;
+}
+.btn-ed.cancel:hover { background:rgba(100,116,139,.1); }
+.btn-ed.publish {
+  background:var(--green); color:#fff; border:none;
+}
+.btn-ed.publish:not(:disabled):hover { opacity:.85; }
+
+/* Poll block */
+.poll-block {
+  display:flex; flex-direction:column; gap:6px; flex-shrink:0;
+  background:rgba(129,140,248,.06); border:1px solid rgba(129,140,248,.2);
+  border-radius:10px; padding:11px;
+}
+.poll-label { font-size:.75rem; font-weight:700; color:var(--accent); }
+.poll-input {
+  width:100%; background:var(--bg); border:1px solid var(--border);
+  border-radius:7px; color:var(--text); font-size:.82rem; padding:6px 9px;
+  outline:none; transition:border-color .15s;
+}
+.poll-input:focus { border-color:var(--accent); }
+.poll-input::placeholder { color:var(--text-muted); }
+
+/* Status badges */
+.badge-status {
+  display:inline-flex; align-items:center; padding:2px 7px; border-radius:999px;
+  font-size:.65rem; font-weight:700; white-space:nowrap; flex-shrink:0;
+}
+.badge-status.new       { background:rgba(96,165,250,.12); border:1px solid rgba(96,165,250,.3); color:#60a5fa; }
+.badge-status.rewritten { background:rgba(192,132,252,.12); border:1px solid rgba(192,132,252,.3); color:var(--purple); }
+.badge-status.published { background:var(--green-dim); border:1px solid rgba(74,222,128,.28); color:var(--green); }
+
+/* Misc */
+.empty-state {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-height:180px; color:var(--text-muted); gap:8px; text-align:center; padding:20px;
+}
+.empty-icon { font-size:1.8rem; opacity:.3; }
+.loading-dots { display:flex; gap:5px; justify-content:center; margin:50px auto; }
+.loading-dots span { width:7px; height:7px; border-radius:50%; background:var(--border); animation:pulse 1s ease-in-out infinite; }
+.loading-dots span:nth-child(2) { animation-delay:.2s; }
+.loading-dots span:nth-child(3) { animation-delay:.4s; }
+@keyframes pulse { 0%,100%{opacity:.3;transform:scale(.85)} 50%{opacity:1;transform:scale(1.1)} }
+.toast {
+  position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(80px);
+  background:var(--card); border:1px solid var(--border); color:var(--text);
+  padding:8px 18px; border-radius:9px; font-size:.83rem; font-weight:500;
+  z-index:1000; transition:transform .28s ease,opacity .28s ease;
+  opacity:0; pointer-events:none; box-shadow:0 6px 20px rgba(0,0,0,.5);
+  white-space:nowrap; max-width:90vw; overflow:hidden; text-overflow:ellipsis;
+}
+.toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+.toast.success { border-color:rgba(74,222,128,.5);  color:var(--green); }
+.toast.error   { border-color:rgba(248,113,113,.5); color:var(--red);   }
+.toast.info    { border-color:rgba(129,140,248,.5); color:var(--accent);}
+</style>
+
+<!-- ══ MARKUP ══ -->
+<div class="app">
+
+  <!-- ▌COLUMN 1: CHANNELS ▌ -->
+  <aside class="channels-panel">
+    <div class="ch-panel-header">
+      <div class="logo">Емо<span>Атлас</span></div>
+      <button class="btn-parser" id="btnParser">▶ Парсер</button>
+    </div>
+    <div class="channels-heading">Канали</div>
+    <ul class="channels-list" id="channelsList">
+      {% for ch in channels %}
+      <li class="channel-item" data-channel="{{ ch.name }}"
+          onclick="selectChannel(this,'{{ ch.name }}')">
+        <div class="ch-avatar" style="background:{{ ch.color }}">
+          {{ ch.name[1]|upper if ch.name.startswith('@') else ch.name[0]|upper }}
+        </div>
+        <div class="ch-info">
+          <div class="ch-name">{{ ch.name }}</div>
+          <div class="ch-meta">{{ ch.new_count }} нових</div>
+        </div>
+        {% if ch.new_count > 0 %}<span class="ch-badge">{{ ch.new_count }}</span>{% endif %}
+        <button class="ch-remove" onclick="removeChannel(event,'{{ ch.name }}')" title="Видалити">×</button>
+      </li>
+      {% endfor %}
+      {% if not channels %}
+      <li style="padding:13px 10px;color:var(--text-muted);font-size:.8rem;">
+        Запустіть парсер або додайте канал
+      </li>
+      {% endif %}
+    </ul>
+    <div class="add-channel-wrap">
+      <button class="btn-add-ch" id="btnAddCh" onclick="toggleAddCh()">+ Додати канал</button>
+      <div class="add-ch-form" id="addChForm">
+        <input class="add-ch-input" id="newChInput" type="text" placeholder="@channel_name"
+               onkeydown="if(event.key==='Enter') addChannel()">
+        <div class="add-ch-btns">
+          <button class="btn-xs primary" onclick="addChannel()">Додати</button>
+          <button class="btn-xs ghost"   onclick="toggleAddCh()">Скасувати</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ▌COLUMN 2: POSTS ▌ -->
+  <div class="posts-panel">
+
+    <div class="posts-sticky-header">
+      <!-- My channel block -->
+      <div class="my-channel-block">
+        <div class="my-ch-header">
+          <span class="my-ch-label">Мій канал</span>
+          <span class="my-ch-name">@emo_atlas_ua</span>
+        </div>
+        <div class="my-ch-row">
+          <div class="my-ch-avatar">EA</div>
+          <div class="my-ch-upload-wrap">
+            <label class="my-ch-upload-area">
+              <span class="my-ch-upload-plus" id="myChPlus">+</span>
+              <img class="my-ch-preview" id="myChPreview" alt="">
+              <input type="file" accept="image/*,video/mp4" style="display:none"
+                     onchange="myChSelectPhoto(this)">
+            </label>
+            <button class="my-ch-remove-x" id="myChRemoveBtn"
+                    onclick="myChRemovePhoto()">×</button>
+          </div>
+          <button class="btn-text accent" onclick="myChOpenEditor()">Відкрити в редакторі</button>
+        </div>
+      </div>
+
+      <!-- Posts toolbar -->
+      <div class="posts-toolbar">
+        <span class="posts-title" id="panelTitle">Оберіть канал</span>
+        <button class="btn-rewrite-all" id="btnRewriteAll"
+                style="display:none" onclick="rewriteAll()">✦ Переписати всі</button>
+      </div>
+    </div>
+
+    <!-- Posts list -->
+    <div class="posts-list" id="postsList">
+      <div class="empty-state">
+        <div class="empty-icon">◎</div>
+        <p>Оберіть канал зліва</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ▌COLUMN 3: EDITOR ▌ -->
+  <div class="editor-panel">
+    <div class="editor-label" id="editorLabel">
+      <span class="ed-placeholder">Нічого не вибрано</span>
+    </div>
+    <textarea class="editor-textarea" id="editorTextarea"
+              placeholder="Оберіть пост із списку або відкрийте в редакторі..."
+              readonly></textarea>
+    <div class="editor-btns">
+      <button class="btn-ed rewrite" id="btnRewrite" onclick="doRewrite()" disabled>✦ Переписати</button>
+      <button class="btn-ed save"    id="btnSave"    onclick="doSave()"    disabled>Зберегти</button>
+      <button class="btn-ed cancel"                  onclick="doCancel()">Скасувати</button>
+      <button class="btn-ed publish" id="btnPublish" onclick="doPublish()" disabled>Опублікувати</button>
+    </div>
+    <div class="poll-block" id="pollBlock">
+      <div class="poll-label">Опитування:</div>
+      <input class="poll-input" id="pollQuestion" placeholder="Питання...">
+      <input class="poll-input" id="pollOpt1" placeholder="Варіант 1">
+      <input class="poll-input" id="pollOpt2" placeholder="Варіант 2">
+      <input class="poll-input" id="pollOpt3" placeholder="Варіант 3">
+      <input class="poll-input" id="pollOpt4" placeholder="Варіант 4">
+    </div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- ══ JAVASCRIPT ══ -->
+<script>
+'use strict';
+
+// ── State ──────────────────────────────────────────────────────────────────────
+let currentChannel    = null;
+let currentPostId     = null;
+let currentPostStatus = null;
+const postsCache = new Map();   // id → post object
+
+// ── CHANNELS ──────────────────────────────────────────────────────────────────
+
+function selectChannel(el, channel) {
+  document.querySelectorAll('.channel-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  currentChannel = channel;
+  document.getElementById('panelTitle').textContent = channel;
+  document.getElementById('btnRewriteAll').style.display = '';
+  loadChannel(channel);
+}
+
+async function loadChannel(channel) {
+  const list = document.getElementById('postsList');
+  list.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div>';
+  postsCache.clear();
+  try {
+    const res   = await fetch('/api/posts/' + encodeURIComponent(channel));
+    const posts = await res.json();
+    posts.forEach(p => postsCache.set(p.id, p));
+    list.innerHTML = posts.length
+      ? posts.map(renderCard).join('')
+      : '<div class="empty-state"><div class="empty-icon">◎</div><p>Немає постів у цьому каналі</p></div>';
+  } catch {
+    list.innerHTML = '<div class="empty-state"><p>Помилка завантаження</p></div>';
+  }
+}
+
+function toggleAddCh() {
+  const form = document.getElementById('addChForm');
+  const btn  = document.getElementById('btnAddCh');
+  const open = form.classList.toggle('open');
+  btn.style.display = open ? 'none' : '';
+  if (open) document.getElementById('newChInput').focus();
+}
+
+async function addChannel() {
+  const input   = document.getElementById('newChInput');
+  let   channel = input.value.trim();
+  if (!channel) return;
+  const data = await apiPost('/channels/add', { channel });
+  if (data.ok) {
+    appendChannelItem(data.channel, data.color);
+    input.value = '';
+    toggleAddCh();
+    toast(`Канал ${data.channel} додано`, 'success');
+  } else {
+    toast(data.error || 'Помилка', 'error');
+  }
+}
+
+function appendChannelItem(channel, color) {
+  const list   = document.getElementById('channelsList');
+  const letter = channel.startsWith('@') ? channel[1].toUpperCase() : channel[0].toUpperCase();
+  const li     = document.createElement('li');
+  li.className = 'channel-item';
+  li.dataset.channel = channel;
+  li.setAttribute('onclick', `selectChannel(this,'${esc(channel)}')`);
+  li.innerHTML = `
+    <div class="ch-avatar" style="background:${color}">${letter}</div>
+    <div class="ch-info">
+      <div class="ch-name">${esc(channel)}</div>
+      <div class="ch-meta">0 нових</div>
+    </div>
+    <button class="ch-remove" onclick="removeChannel(event,'${esc(channel)}')" title="Видалити">×</button>`;
+  list.prepend(li);
+}
+
+async function removeChannel(event, channel) {
+  event.stopPropagation();
+  if (!confirm(`Видалити канал ${channel} зі списку джерел?\n\nПости в базі залишаться.`)) return;
+  const data = await apiPost('/channels/remove', { channel });
+  if (data.ok) {
+    document.querySelector(`.channel-item[data-channel="${CSS.escape(channel)}"]`)?.remove();
+    if (currentChannel === channel) {
+      currentChannel = null;
+      document.getElementById('panelTitle').textContent = 'Оберіть канал';
+      document.getElementById('btnRewriteAll').style.display = 'none';
+      document.getElementById('postsList').innerHTML =
+        '<div class="empty-state"><div class="empty-icon">◎</div><p>Оберіть канал зліва</p></div>';
+    }
+    toast(`Канал ${channel} видалено`, 'info');
+  } else {
+    toast(data.error || 'Помилка', 'error');
+  }
+}
+
+// ── MY CHANNEL ────────────────────────────────────────────────────────────────
+
+function myChSelectPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const preview = document.getElementById('myChPreview');
+  preview.src = url;
+  preview.style.display = 'block';
+  document.getElementById('myChPlus').style.display = 'none';
+  document.getElementById('myChRemoveBtn').classList.add('shown');
+}
+
+function myChRemovePhoto() {
+  const preview = document.getElementById('myChPreview');
+  preview.src = '';
+  preview.style.display = 'none';
+  document.getElementById('myChPlus').style.display = '';
+  document.getElementById('myChRemoveBtn').classList.remove('shown');
+}
+
+function myChOpenEditor() {
+  currentPostId     = null;
+  currentPostStatus = null;
+  document.getElementById('editorLabel').innerHTML =
+    '<span class="ed-channel">Мій канал</span> · <span class="ed-meta">@emo_atlas_ua</span>';
+  const ta = document.getElementById('editorTextarea');
+  ta.value            = '';
+  ta.dataset.original = '';
+  ta.readOnly         = false;
+  clearPoll();
+  syncEditorBtns();
+}
+
+// ── POST CARDS ────────────────────────────────────────────────────────────────
+
+function renderCard(post) {
+  const text       = post.original_text || '';
+  const preview    = text
+    ? text.slice(0, 300) + (text.length > 300 ? '…' : '')
+    : '(немає тексту — лише медіа)';
+  const previewCls = text ? 'card-preview' : 'card-preview empty';
+  const scls       = statusCls(post.status);
+  const isPubl     = post.status === 'опублікований';
+  const hasMedia   = !!post.media_path;
+
+  let mediaActionsHtml = '';
+  if (!isPubl) {
+    if (hasMedia) {
+      mediaActionsHtml = `
+        <button class="btn-text red" onclick="removeCardMedia(this,${post.id})">Видалити фото</button>
+        <label class="btn-text">Змінити фото<input type="file" accept="image/*,video/mp4" style="display:none" onchange="uploadCardMedia(this,${post.id})"></label>`;
+    } else {
+      mediaActionsHtml = `
+        <label class="btn-text">Додати фото<input type="file" accept="image/*,video/mp4" style="display:none" onchange="uploadCardMedia(this,${post.id})"></label>`;
+    }
+  }
+
+  return `
+    <article class="post-card" data-id="${post.id}" data-status="${esc(post.status)}">
+      <div class="card-header">
+        <span class="card-channel">${esc(post.channel)}</span>
+        <span class="badge-status ${scls}">${esc(post.status)}</span>
+        <span class="card-time">${fmtDate(post.date)}</span>
+        <button class="btn-delete-card" onclick="ignorePost(this,${post.id})">✕</button>
+      </div>
+      <div class="${previewCls}">${esc(preview)}</div>
+      ${renderCardMedia(post.media_path)}
+      <div class="card-actions">
+        ${mediaActionsHtml}
+        <button class="btn-text accent" onclick="openCardInEditor(${post.id})">Відкрити в редакторі</button>
+      </div>
+    </article>`;
+}
+
+function renderCardMedia(mediaPath) {
+  if (!mediaPath) return '';
+  const filename = mediaPath.replace(/\\/g, '/').split('/').pop();
+  const ext      = filename.split('.').pop().toLowerCase();
+  const url      = '/media/' + encodeURIComponent(filename);
+  if (['jpg','jpeg','png','gif','webp'].includes(ext))
+    return `<div class="card-thumb-wrap"><img class="card-thumb" src="${url}" alt="" loading="lazy"></div>`;
+  if (['mp4','mov','avi','m4v'].includes(ext))
+    return `<div class="card-video-thumb">▶ відео</div>`;
+  return '';
+}
+
+// ── CARD ACTIONS ──────────────────────────────────────────────────────────────
+
+async function ignorePost(btn, id) {
+  const card = btn.closest('.post-card');
+  try {
+    const data = await apiPost(`/post/${id}/ignore`);
+    if (data.ok) {
+      card.style.transition = 'opacity .22s, transform .22s';
+      card.style.opacity    = '0';
+      card.style.transform  = 'translateX(14px)';
+      setTimeout(() => { card.remove(); postsCache.delete(id); }, 250);
+      if (currentPostId === id) doCancel();
+    }
+  } catch { toast('Помилка', 'error'); }
+}
+
+async function removeCardMedia(btn, id) {
+  const data = await apiPost(`/post/${id}/remove-media`);
+  if (data.ok) {
+    const card = btn.closest('.post-card');
+    card.querySelector('.card-thumb-wrap')?.remove();
+    card.querySelector('.card-video-thumb')?.remove();
+    const post = postsCache.get(id);
+    if (post) post.media_path = null;
+    const actions = card.querySelector('.card-actions');
+    if (actions) {
+      actions.innerHTML = `
+        <label class="btn-text">Додати фото<input type="file" accept="image/*,video/mp4" style="display:none" onchange="uploadCardMedia(this,${id})"></label>
+        <button class="btn-text accent" onclick="openCardInEditor(${id})">Відкрити в редакторі</button>`;
+    }
+    toast('Фото видалено', 'info');
+  } else {
+    toast(data.error || 'Помилка', 'error');
+  }
+}
+
+async function uploadCardMedia(input, id) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res  = await fetch(`/post/${id}/upload-media`, { method:'POST', body:fd });
+    const data = await res.json();
+    if (data.ok) {
+      const card = input.closest('.post-card');
+      const url  = '/media/' + encodeURIComponent(data.filename);
+      let wrap = card.querySelector('.card-thumb-wrap');
+      if (!wrap) {
+        wrap = document.createElement('div');
+        wrap.className = 'card-thumb-wrap';
+        card.querySelector('.card-preview').insertAdjacentElement('afterend', wrap);
+      }
+      wrap.innerHTML = `<img class="card-thumb" src="${url}" alt="">`;
+      const post = postsCache.get(id);
+      if (post) post.media_path = data.media_path;
+      const actions = card.querySelector('.card-actions');
+      if (actions) {
+        actions.innerHTML = `
+          <button class="btn-text red" onclick="removeCardMedia(this,${id})">Видалити фото</button>
+          <label class="btn-text">Змінити фото<input type="file" accept="image/*,video/mp4" style="display:none" onchange="uploadCardMedia(this,${id})"></label>
+          <button class="btn-text accent" onclick="openCardInEditor(${id})">Відкрити в редакторі</button>`;
+      }
+      toast('Фото завантажено', 'success');
+    } else {
+      toast(data.error || 'Помилка', 'error');
+    }
+  } catch { toast('Помилка з\'єднання', 'error'); }
+}
+
+// ── EDITOR ────────────────────────────────────────────────────────────────────
+
+function openCardInEditor(id) {
+  const post = postsCache.get(id);
+  if (!post) return;
+  currentPostId     = id;
+  currentPostStatus = post.status;
+
+  const text = post.rewritten_text || post.original_text || '';
+  const ta   = document.getElementById('editorTextarea');
+  ta.value            = text;
+  ta.dataset.original = text;
+  ta.readOnly         = post.status === 'опублікований';
+
+  document.getElementById('editorLabel').innerHTML =
+    `<span class="ed-channel">${esc(post.channel)}</span>` +
+    ` · <span class="ed-meta">${fmtDate(post.date)}</span>` +
+    ` <span class="badge-status ${statusCls(post.status)}">${esc(post.status)}</span>`;
+
+  document.getElementById('pollQuestion').value = post.poll_question || '';
+  const opts = post.poll_options || [];
+  document.getElementById('pollOpt1').value = opts[0] || '';
+  document.getElementById('pollOpt2').value = opts[1] || '';
+  document.getElementById('pollOpt3').value = opts[2] || '';
+  document.getElementById('pollOpt4').value = opts[3] || '';
+  syncEditorBtns();
+}
+
+function syncEditorBtns() {
+  const hasId      = currentPostId !== null;
+  const isRewritten = currentPostStatus === 'переписаний';
+  document.getElementById('btnRewrite').disabled = !hasId;
+  document.getElementById('btnSave').disabled    = !hasId;
+  document.getElementById('btnPublish').disabled = !(hasId && isRewritten);
+}
+
+async function doRewrite() {
+  if (!currentPostId) return;
+  const btn  = document.getElementById('btnRewrite');
+  const orig = btn.textContent;
+  setLoading(btn, true, '...');
+  try {
+    const data = await apiPost(`/post/${currentPostId}/rewrite`);
+    if (data.ok) {
+      const ta = document.getElementById('editorTextarea');
+      ta.value = ta.dataset.original = data.text;
+
+      document.getElementById('pollQuestion').value = data.poll_question || '';
+      const opts = data.poll_options || [];
+      document.getElementById('pollOpt1').value = opts[0] || '';
+      document.getElementById('pollOpt2').value = opts[1] || '';
+      document.getElementById('pollOpt3').value = opts[2] || '';
+      document.getElementById('pollOpt4').value = opts[3] || '';
+
+      currentPostStatus = 'переписаний';
+      const post = postsCache.get(currentPostId);
+      if (post) { post.rewritten_text = data.text; post.status = 'переписаний'; post.poll_question = data.poll_question; post.poll_options = data.poll_options; }
+      refreshEditorLabel();
+      updateCardBadge(currentPostId, 'переписаний');
+      syncEditorBtns();
+      toast(`Переписано · ${data.emotion}`, 'success');
+    } else {
+      toast(data.error || 'Помилка переписування', 'error');
+    }
+  } catch { toast('Помилка з\'єднання', 'error'); }
+  finally  { setLoading(btn, false, orig); }
+}
+
+async function doSave() {
+  if (!currentPostId) return;
+  const btn  = document.getElementById('btnSave');
+  const orig = btn.textContent;
+  setLoading(btn, true, '...');
+  try {
+    const text          = document.getElementById('editorTextarea').value;
+    const poll_question = document.getElementById('pollQuestion').value.trim();
+    const poll_options  = ['pollOpt1','pollOpt2','pollOpt3','pollOpt4']
+      .map(i => document.getElementById(i).value.trim()).filter(Boolean);
+
+    const data = await apiPost(`/post/${currentPostId}/save`, { text, poll_question, poll_options });
+    if (data.ok) {
+      currentPostStatus = 'переписаний';
+      const post = postsCache.get(currentPostId);
+      if (post) { post.rewritten_text = text; post.status = 'переписаний'; post.poll_question = poll_question || null; post.poll_options = poll_options.length ? poll_options : null; }
+      refreshEditorLabel();
+      updateCardBadge(currentPostId, 'переписаний');
+      updateCardPreview(currentPostId, text);
+      syncEditorBtns();
+      toast('Збережено', 'success');
+    } else {
+      toast(data.error || 'Помилка збереження', 'error');
+    }
+  } finally { setLoading(btn, false, orig); }
+}
+
+function doCancel() {
+  currentPostId = currentPostStatus = null;
+  const ta = document.getElementById('editorTextarea');
+  ta.value = ''; ta.readOnly = true;
+  document.getElementById('editorLabel').innerHTML = '<span class="ed-placeholder">Нічого не вибрано</span>';
+  clearPoll();
+  syncEditorBtns();
+}
+
+async function doPublish() {
+  if (!currentPostId) return;
+  if (!confirm('Опублікувати цей пост у Telegram?')) return;
+  const btn  = document.getElementById('btnPublish');
+  const orig = btn.textContent;
+  setLoading(btn, true, '...');
+  try {
+    const data = await apiPost(`/post/${currentPostId}/publish`);
+    if (data.ok) {
+      currentPostStatus = 'опублікований';
+      document.getElementById('editorTextarea').readOnly = true;
+      const post = postsCache.get(currentPostId);
+      if (post) post.status = 'опублікований';
+      refreshEditorLabel();
+      updateCardBadge(currentPostId, 'опублікований');
+      syncEditorBtns();
+      toast('Опубліковано в Telegram!', 'success');
+    } else {
+      toast(data.error || 'Помилка публікації', 'error');
+      setLoading(btn, false, orig);
+    }
+  } catch { toast('Помилка з\'єднання', 'error'); setLoading(btn, false, orig); }
+}
+
+function refreshEditorLabel() {
+  const post = postsCache.get(currentPostId);
+  if (!post) return;
+  document.getElementById('editorLabel').innerHTML =
+    `<span class="ed-channel">${esc(post.channel)}</span>` +
+    ` · <span class="ed-meta">${fmtDate(post.date)}</span>` +
+    ` <span class="badge-status ${statusCls(currentPostStatus)}">${esc(currentPostStatus)}</span>`;
+}
+
+function updateCardBadge(id, status) {
+  const card = document.querySelector(`.post-card[data-id="${id}"]`);
+  if (!card) return;
+  card.dataset.status = status;
+  const badge = card.querySelector('.badge-status');
+  if (badge) { badge.className = `badge-status ${statusCls(status)}`; badge.textContent = status; }
+}
+
+function updateCardPreview(id, text) {
+  const card = document.querySelector(`.post-card[data-id="${id}"]`);
+  if (!card || !text) return;
+  const p = card.querySelector('.card-preview');
+  if (p) { p.className = 'card-preview'; p.textContent = text.slice(0, 300) + (text.length > 300 ? '…' : ''); }
+}
+
+// ── REWRITE ALL ───────────────────────────────────────────────────────────────
+
+async function rewriteAll() {
+  if (!currentChannel) return;
+  const btn  = document.getElementById('btnRewriteAll');
+  const orig = btn.textContent;
+  setLoading(btn, true, '...');
+  try {
+    const data = await apiPost('/rewrite-all', { channel: currentChannel });
+    if (data.ok) {
+      toast(`Переписано ${data.count} постів`, 'success');
+      await loadChannel(currentChannel);
+    } else {
+      toast('Помилка переписування', 'error');
+    }
+  } catch { toast('Помилка з\'єднання', 'error'); }
+  finally  { setLoading(btn, false, orig); }
+}
+
+// ── PARSER ────────────────────────────────────────────────────────────────────
+
+document.getElementById('btnParser').addEventListener('click', async () => {
+  const btn  = document.getElementById('btnParser');
+  const orig = btn.textContent;
+  setLoading(btn, true, '...');
+  try {
+    const data = await apiPost('/run-parser');
+    toast(data.ok ? 'Парсер запущено у фоні' : (data.error || 'Помилка'),
+          data.ok ? 'info' : 'error');
+  } finally { setLoading(btn, false, orig); }
+});
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+
+function clearPoll() {
+  ['pollQuestion','pollOpt1','pollOpt2','pollOpt3','pollOpt4']
+    .forEach(id => { document.getElementById(id).value = ''; });
+}
+
+function statusCls(status) {
+  return { 'новий':'new', 'переписаний':'rewritten', 'опублікований':'published' }[status] || 'new';
+}
+
+async function apiPost(url, body = null) {
+  const opts = { method:'POST' };
+  if (body) { opts.headers = { 'Content-Type':'application/json' }; opts.body = JSON.stringify(body); }
+  return (await fetch(url, opts)).json();
+}
+
+function setLoading(btn, loading, label) { btn.disabled = loading; btn.textContent = label; }
+
+function esc(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtDate(s) {
+  if (!s) return '';
+  s = s.replace('T',' ').slice(0,16);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2})$/);
+  return m ? `${m[3]}.${m[2]}.${m[1]} ${m[4]}` : s;
+}
+
+let _tt;
+function toast(msg, type='success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = `toast show ${type}`;
+  clearTimeout(_tt); _tt = setTimeout(() => { el.className='toast'; }, 3200);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const first = document.querySelector('.channel-item');
+  if (first) first.click();
+});
+</script>
+{% endblock %}

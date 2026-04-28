@@ -1,0 +1,7 @@
+.env
+reposter_session.session
+media/
+db/posts.db
+__pycache__/
+*.pyc
+.claude/
