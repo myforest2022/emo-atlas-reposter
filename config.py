@@ -8,7 +8,6 @@ CHANNEL_ID = "@emo_atlas_ua"
 SOURCE_CHANNELS = [
     "@your_psychology_ua",
     "@vidvertarealnist",
-    "@psy_support",
     "@psycompasss"
 ]
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
