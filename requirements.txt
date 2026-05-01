@@ -1,0 +1,17 @@
+# Web framework
+flask>=3.0
+
+# Telegram — парсер каналів (Telethon userbot)
+telethon>=1.36
+
+# Telegram — публікація через Bot API
+python-telegram-bot>=21.0
+
+# Claude AI (Anthropic)
+anthropic>=0.40
+
+# Змінні середовища (.env)
+python-dotenv>=1.0
+
+# WSGI-сервер для production
+gunicorn>=22.0
