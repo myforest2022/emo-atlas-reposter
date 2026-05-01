@@ -11,13 +11,14 @@ import asyncio
 import os
 import re
 import sys
+from functools import wraps
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import subprocess
 from flask import (
     Flask, render_template, redirect, url_for,
-    request, send_from_directory, jsonify
+    request, send_from_directory, jsonify, session
 )
 
 from db.database import get_connection, init_db
@@ -31,10 +32,44 @@ MEDIA_DIR  = os.path.join(ROOT_DIR, "media")
 CONFIG_PATH = os.path.join(ROOT_DIR, "config.py")
 
 app = Flask(__name__, template_folder="templates")
-app.secret_key = "reposter-panel-secret"
+app.secret_key = os.getenv("SECRET_KEY", "reposter-panel-secret-change-me")
 
 with app.app_context():
     init_db()
+
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")
+
+# ─── Авторизація ──────────────────────────────────────────────────────────────
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("authed"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"ok": False, "error": "Unauthorized"}), 401
+            return redirect(url_for("login_page"))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    if session.get("authed"):
+        return redirect(url_for("index"))
+    error = None
+    if request.method == "POST":
+        pwd = request.form.get("password", "")
+        if APP_PASSWORD and pwd == APP_PASSWORD:
+            session["authed"] = True
+            return redirect(url_for("index"))
+        error = "Невірний пароль"
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
 
 # ─── Кольори аватарів каналів ─────────────────────────────────────────────────
 
@@ -216,6 +251,7 @@ def set_status(db_id: int, status: str) -> None:
 # ─── Маршрути ─────────────────────────────────────────────────────────────────
 
 @app.route("/")
+@login_required
 def index():
     """
     Головна сторінка.
@@ -227,12 +263,14 @@ def index():
 
 
 @app.route("/post/<int:db_id>")
+@login_required
 def post_detail(db_id: int):
     """Стара сторінка посту → редирект на головну (UI тепер однсторінковий)."""
     return redirect(url_for("index"))
 
 
 @app.route("/api/posts/<channel>")
+@login_required
 def api_posts(channel: str):
     """
     JSON-ендпоінт: пости одного каналу.
@@ -243,12 +281,14 @@ def api_posts(channel: str):
 
 
 @app.route("/media/<path:filename>")
+@login_required
 def serve_media(filename: str):
     """Роздає медіафайли з папки media/ (фото і відео для мініатюр у картках)."""
     return send_from_directory(MEDIA_DIR, filename)
 
 
 @app.route("/post/<int:db_id>/remove-media", methods=["POST"])
+@login_required
 def remove_media(db_id: int):
     """Видаляє медіа з посту — очищає media_path в БД."""
     with get_connection() as conn:
@@ -258,6 +298,7 @@ def remove_media(db_id: int):
 
 
 @app.route("/post/<int:db_id>/upload-media", methods=["POST"])
+@login_required
 def upload_media(db_id: int):
     """Завантажує нове фото для посту, зберігає в media/ і оновлює media_path в БД."""
     os.makedirs(MEDIA_DIR, exist_ok=True)
@@ -280,6 +321,7 @@ def upload_media(db_id: int):
 
 
 @app.route("/post/<int:db_id>/ignore", methods=["POST"])
+@login_required
 def ignore_post(db_id: int):
     """
     Кнопка "Видалити" в картці посту.
@@ -291,6 +333,7 @@ def ignore_post(db_id: int):
 
 
 @app.route("/post/<int:db_id>/save", methods=["POST"])
+@login_required
 def save_text(db_id: int):
     """
     Зберігає відредагований текст та опитування з редактора.
@@ -314,6 +357,7 @@ def save_text(db_id: int):
 
 
 @app.route("/my-channel/post", methods=["POST"])
+@login_required
 def my_channel_post():
     """
     Зберігає новий пост написаний вручну для власного каналу (@emo_atlas_ua).
@@ -344,6 +388,7 @@ def my_channel_post():
 
 
 @app.route("/post/<int:db_id>/rewrite", methods=["POST"])
+@login_required
 def rewrite(db_id: int):
     """
     Ручне переписування одного поста через Claude API.
@@ -383,6 +428,7 @@ def rewrite(db_id: int):
 
 
 @app.route("/post/<int:db_id>/publish", methods=["POST"])
+@login_required
 def publish(db_id: int):
     """
     Публікує пост у Telegram-канал.
@@ -412,6 +458,7 @@ def publish(db_id: int):
 
 
 @app.route("/rewrite-all", methods=["POST"])
+@login_required
 def rewrite_all():
     """
     Переписує всі пости зі статусом 'новий' для вказаного каналу.
@@ -457,6 +504,7 @@ def rewrite_all():
 
 
 @app.route("/channels/add", methods=["POST"])
+@login_required
 def add_channel():
     """
     Додає канал до SOURCE_CHANNELS в config.py.
@@ -481,6 +529,7 @@ def add_channel():
 
 
 @app.route("/channels/remove", methods=["POST"])
+@login_required
 def remove_channel():
     """
     Видаляє канал з SOURCE_CHANNELS в config.py.
@@ -502,6 +551,7 @@ def remove_channel():
 
 
 @app.route("/run-parser", methods=["POST"])
+@login_required
 def run_parser():
     """
     Запускає parser/fetch.py у фоновому subprocess.

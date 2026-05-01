@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Вхід · ЕмоАтлас{% endblock %}
+{% block body %}
+<style>
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 36px 32px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.login-logo {
+  text-align: center;
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -.5px;
+  color: var(--text);
+}
+.login-logo span { color: var(--accent); }
+.login-subtitle {
+  text-align: center;
+  font-size: .8rem;
+  color: var(--text-muted);
+  margin-top: -12px;
+}
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.login-label {
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.login-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font-size: .95rem;
+  padding: 10px 13px;
+  outline: none;
+  transition: border-color .15s;
+}
+.login-input:focus { border-color: var(--accent); }
+.login-input::placeholder { color: var(--text-muted); }
+.login-error {
+  background: var(--red-dim);
+  border: 1px solid rgba(248,113,113,.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: .8rem;
+  color: var(--red);
+  text-align: center;
+}
+.login-btn {
+  width: 100%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  padding: 11px;
+  font-size: .9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .14s;
+}
+.login-btn:hover { opacity: .87; }
+.login-btn:active { opacity: .75; }
+</style>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">Емо<span>Атлас</span></div>
+    <p class="login-subtitle">Панель керування репостером</p>
+
+    {% if error %}
+    <div class="login-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/login">
+      <div class="login-field">
+        <label class="login-label" for="password">Пароль</label>
+        <input class="login-input" type="password" id="password" name="password"
+               placeholder="Введіть пароль..." autofocus autocomplete="current-password">
+      </div>
+      <br>
+      <button class="login-btn" type="submit">Увійти</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
