@@ -20,6 +20,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
 
 from config import TELEGRAM_API_ID, TELEGRAM_API_HASH, SOURCE_CHANNELS
@@ -33,6 +34,11 @@ MEDIA_DIR = os.path.join(os.path.dirname(__file__), "..", "media")
 
 # Файл сесії Telethon (зберігається поруч із скриптом)
 SESSION_FILE = os.path.join(os.path.dirname(__file__), "..", "reposter_session")
+
+# На Render використовуємо SESSION_STRING зі змінної середовища;
+# локально — файл reposter_session.session
+_session_string = os.getenv("SESSION_STRING", "")
+SESSION = StringSession(_session_string) if _session_string else SESSION_FILE
 
 
 async def download_media(client: TelegramClient, message, channel: str) -> str | None:
@@ -117,7 +123,7 @@ async def main():
     init_db()
 
     print("Підключення до Telegram...")
-    async with TelegramClient(SESSION_FILE, TELEGRAM_API_ID, TELEGRAM_API_HASH) as client:
+    async with TelegramClient(SESSION, TELEGRAM_API_ID, TELEGRAM_API_HASH) as client:
         print("Підключено.\n")
         for channel in SOURCE_CHANNELS:
             await fetch_from_channel(client, channel)

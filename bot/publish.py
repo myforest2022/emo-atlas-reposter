@@ -3,14 +3,13 @@
 
 Логіка:
 1. Беремо ОДИН пост зі статусом 'переписаний' з бази даних.
-2. Якщо є media_path — визначаємо тип (фото / відео) і прикріплюємо до посту.
+2. Якщо є media_path:
+   а) файл є на диску → публікуємо напряму
+   б) файл відсутній (ephemeral FS на Render) → повторно завантажуємо
+      оригінал через Telethon за (channel, post_id) і публікуємо
 3. Публікуємо rewritten_text у канал CHANNEL_ID.
 4. Якщо є poll_question і poll_options — надсилаємо анонімне опитування.
 5. Оновлюємо статус на 'опублікований'.
-6. Виводимо результат у термінал.
-
-Запуск: python -m bot.publish
-Щоб опублікувати наступний пост — запускайте знову.
 """
 
 import asyncio
@@ -19,7 +18,10 @@ import os
 from telegram import Bot
 from telegram.error import TelegramError
 
-from config import BOT_TOKEN, CHANNEL_ID
+from telethon import TelegramClient
+from telethon.sessions import StringSession
+
+from config import BOT_TOKEN, CHANNEL_ID, TELEGRAM_API_ID, TELEGRAM_API_HASH
 from db.database import get_connection
 
 # ─── Розширення для визначення типу медіа ────────────────────────────────────
@@ -27,15 +29,18 @@ from db.database import get_connection
 PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".m4v"}
 
+ROOT_DIR  = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+MEDIA_DIR = os.path.join(ROOT_DIR, "media")
+
+# Сесія Telethon: StringSession з env (Render) або файл (локально)
+_session_string = os.getenv("SESSION_STRING", "")
+_TELETHON_SESSION = StringSession(_session_string) if _session_string else os.path.join(ROOT_DIR, "reposter_session")
+
 
 def get_media_type(path: str) -> str:
-    """
-    Повертає 'photo', 'video' або 'none' за розширенням файлу.
-    Повертає 'none' якщо файл не існує на диску.
-    """
-    if not path or not os.path.isfile(path):
+    """Повертає 'photo', 'video' або 'none' за розширенням файлу."""
+    if not path:
         return "none"
-
     ext = os.path.splitext(path)[1].lower()
     if ext in PHOTO_EXTENSIONS:
         return "photo"
@@ -43,18 +48,48 @@ def get_media_type(path: str) -> str:
         return "video"
     return "none"
 
+# ─── Повторне завантаження медіа через Telethon ──────────────────────────────
+
+async def redownload_media(channel: str, post_id: int, media_path: str) -> bool:
+    """
+    Завантажує медіа оригінального поста з source-каналу через Telethon.
+    Використовується коли файл зник з диску (ephemeral FS на Render).
+    Повертає True якщо файл успішно завантажено.
+    """
+    if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
+        print("⚠️  TELEGRAM_API_ID/HASH відсутні — повторне завантаження неможливе.")
+        return False
+
+    try:
+        os.makedirs(MEDIA_DIR, exist_ok=True)
+        async with TelegramClient(_TELETHON_SESSION, int(TELEGRAM_API_ID), TELEGRAM_API_HASH) as client:
+            message = await client.get_messages(channel, ids=post_id)
+            if message is None or not message.media:
+                print(f"⚠️  Повідомлення {post_id} з {channel} не містить медіа.")
+                return False
+            await client.download_media(message.media, file=media_path)
+
+        if os.path.isfile(media_path):
+            print(f"♻️  Медіа повторно завантажено: {os.path.basename(media_path)}")
+            return True
+
+        print("⚠️  Файл не з'явився після повторного завантаження.")
+        return False
+
+    except Exception as e:
+        print(f"⚠️  Не вдалося повторно завантажити медіа: {e}")
+        return False
+
 # ─── База даних ───────────────────────────────────────────────────────────────
 
 def fetch_one_rewritten_post() -> dict | None:
     """
     Повертає один пост зі статусом 'переписаний' (найстаріший за id).
-    Повертає None якщо таких постів немає.
-
     poll_options зберігається як рядок через ||| — розбиваємо назад у список.
     """
     with get_connection() as conn:
         row = conn.execute(
-            """SELECT id, channel, original_text, rewritten_text,
+            """SELECT id, post_id, channel, original_text, rewritten_text,
                       media_path, poll_question, poll_options
                FROM posts
                WHERE status = 'переписаний'
@@ -65,16 +100,17 @@ def fetch_one_rewritten_post() -> dict | None:
     if row is None:
         return None
 
-    options_raw = row[6]
+    options_raw = row[7]
     poll_options = options_raw.split("|||") if options_raw else None
 
     return {
         "id":             row[0],
-        "channel":        row[1],
-        "original_text":  row[2],
-        "rewritten_text": row[3],
-        "media_path":     row[4],
-        "poll_question":  row[5],
+        "post_id":        row[1],
+        "channel":        row[2],
+        "original_text":  row[3],
+        "rewritten_text": row[4],
+        "media_path":     row[5],
+        "poll_question":  row[6],
         "poll_options":   poll_options,
     }
 
@@ -95,29 +131,37 @@ async def publish_post(post: dict) -> None:
     Публікує один пост у Telegram-канал.
 
     Послідовність:
-    1. Надсилаємо текст (з фото/відео або без).
-       - Якщо є фото → send_photo(caption=text)
-       - Якщо є відео → send_video(caption=text)
-       - Без медіа    → send_message(text)
-    2. Якщо є poll_question і poll_options (4 варіанти) →
-       надсилаємо анонімне опитування send_poll():
-       - is_anonymous=True  — читач не бачить хто як проголосував
-       - allows_multiple_answers=False — один вибір
-       Опитування йде окремим повідомленням після тексту,
-       тому читач спочатку отримує контекст, а потім може
-       відрефлексувати свій стан через голосування.
+    1. Перевіряємо чи існує media_path на диску.
+       Якщо файл зник (Render ephemeral FS) — повторно завантажуємо через Telethon.
+    2. Надсилаємо текст (з фото/відео або без).
+    3. Надсилаємо анонімне опитування якщо є.
     """
     bot = Bot(token=BOT_TOKEN)
-    text = post["rewritten_text"]
+    text       = post["rewritten_text"]
     media_path = post.get("media_path")
+    channel    = post.get("channel", "")
+    post_id    = post.get("post_id")
 
     print(f"[DEBUG] post_id    = {post.get('id')}")
     print(f"[DEBUG] media_path = {media_path}")
-    print(f"[DEBUG] file_exists= {os.path.isfile(media_path) if media_path else 'N/A'}")
-    print(f"[DEBUG] text       = {(text or '')[:80]}")
 
-    media_type = get_media_type(media_path)
+    # ── Перевірка наявності файлу; повторне завантаження якщо відсутній ────
+    if media_path and get_media_type(media_path) != "none":
+        if not os.path.isfile(media_path):
+            print(f"⚠️  Файл не знайдено на диску: {media_path}")
+            if channel and post_id:
+                print(f"♻️  Спроба повторно завантажити з {channel} (msg_id={post_id})...")
+                ok = await redownload_media(channel, post_id, media_path)
+                if not ok:
+                    print("⚠️  Повторне завантаження не вдалося — публікуємо тільки текст.")
+                    media_path = None
+            else:
+                print("⚠️  channel або post_id відсутні — публікуємо тільки текст.")
+                media_path = None
+        else:
+            print(f"[DEBUG] file_exists = True")
 
+    media_type  = get_media_type(media_path) if media_path else "none"
     CAPTION_LIMIT = 1024
 
     async with bot:
@@ -147,12 +191,7 @@ async def publish_post(post: dict) -> None:
                 print(f"🎬 Опубліковано з відео: {media_path}")
 
         else:
-            if media_path and media_type == "none":
-                print(f"⚠️  Медіафайл не знайдено на диску: {media_path} — публікуємо тільки текст.")
-            await bot.send_message(
-                chat_id=CHANNEL_ID,
-                text=text,
-            )
+            await bot.send_message(chat_id=CHANNEL_ID, text=text)
             print("💬 Опубліковано текстовий пост.")
 
         # ── 2. Анонімне опитування (якщо є дані) ────────────────────────────
@@ -176,7 +215,6 @@ async def publish_post(post: dict) -> None:
 def run_publisher() -> None:
     """
     Бере один переписаний пост, публікує його і позначає як опублікований.
-    Щоб опублікувати наступний — запустіть скрипт ще раз.
     """
     post = fetch_one_rewritten_post()
 
