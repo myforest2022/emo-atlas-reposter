@@ -27,7 +27,7 @@ from config import TELEGRAM_API_ID, TELEGRAM_API_HASH, SOURCE_CHANNELS
 from db.database import init_db, post_exists, save_post
 
 # Кількість постів, які забираємо з кожного каналу
-POSTS_LIMIT = 2
+POSTS_LIMIT = 10
 
 # Папка для медіафайлів
 MEDIA_DIR = os.path.join(os.path.dirname(__file__), "..", "media")
