@@ -293,6 +293,62 @@
 .toast.success { border-color:rgba(74,222,128,.5);  color:var(--green); }
 .toast.error   { border-color:rgba(248,113,113,.5); color:var(--red);   }
 .toast.info    { border-color:rgba(129,140,248,.5); color:var(--accent);}
+
+/* ══ MOBILE NAV (hidden on desktop) ══ */
+.mobile-nav { display:none; }
+
+@media (max-width:767px) {
+  /* App — резервуємо місце під нижню навігацію */
+  .app { height:calc(100vh - 56px); position:relative; flex-direction:row; }
+
+  /* Кожна панель займає весь екран, за замовчуванням прихована */
+  .channels-panel,
+  .posts-panel,
+  .editor-panel {
+    position:absolute; top:0; left:0;
+    width:100% !important; height:100%;
+    border-right:none; display:none;
+  }
+
+  /* Активна панель — видима */
+  .channels-panel.mobile-active,
+  .posts-panel.mobile-active,
+  .editor-panel.mobile-active { display:flex; }
+
+  /* Editor: дозволяємо скрол всередині */
+  .editor-panel { overflow-y:auto; }
+
+  /* Нижня навігація */
+  .mobile-nav {
+    display:flex;
+    position:fixed; bottom:0; left:0; right:0;
+    height:56px;
+    background:var(--surface); border-top:1px solid var(--border);
+    z-index:200;
+  }
+  .mnav-btn {
+    flex:1; background:transparent; border:none;
+    color:var(--text-muted); font-size:.68rem; font-weight:600;
+    cursor:pointer; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:3px;
+    transition:color .14s; padding:0; position:relative;
+  }
+  .mnav-btn.active { color:var(--accent); }
+  .mnav-icon { font-size:1.15rem; line-height:1; }
+  .mnav-badge {
+    position:absolute; top:6px; right:calc(50% - 16px);
+    background:var(--accent); color:#fff;
+    font-size:.55rem; font-weight:700;
+    padding:1px 4px; border-radius:999px;
+    min-width:14px; text-align:center; line-height:1.4;
+  }
+
+  /* Toast над нав-баром */
+  .toast { bottom:68px; }
+
+  /* Картки — прибираємо обрізку назви каналу на маленькому екрані */
+  .card-channel { max-width:140px; }
+}
 </style>
 
 <!-- ══ MARKUP ══ -->
@@ -407,6 +463,24 @@
   </div>
 
 </div>
+
+<!-- ══ MOBILE BOTTOM NAV ══ -->
+<nav class="mobile-nav" id="mobileNav">
+  <button class="mnav-btn active" data-tab="channels" onclick="mobileTab('channels')">
+    <span class="mnav-icon">☰</span>
+    Канали
+  </button>
+  <button class="mnav-btn" data-tab="posts" onclick="mobileTab('posts')">
+    <span class="mnav-icon">📋</span>
+    <span id="mnavPostsLabel">Пости</span>
+    <span class="mnav-badge" id="mnavBadge" style="display:none"></span>
+  </button>
+  <button class="mnav-btn" data-tab="editor" onclick="mobileTab('editor')">
+    <span class="mnav-icon">✏️</span>
+    Редактор
+  </button>
+</nav>
+
 <div class="toast" id="toast"></div>
 
 <!-- ══ JAVASCRIPT ══ -->
@@ -421,6 +495,30 @@ let isMyChannel       = false;
 let myChPendingFile   = null;   // фото вибране у блоці "Мій канал" — зберігається при doSaveMyChannel
 const postsCache = new Map();   // id → post object
 
+// ── MOBILE NAV ────────────────────────────────────────────────────────────────
+
+function isMobile() { return window.innerWidth <= 767; }
+
+function mobileTab(tab) {
+  const panels = {
+    channels: document.querySelector('.channels-panel'),
+    posts:    document.querySelector('.posts-panel'),
+    editor:   document.querySelector('.editor-panel'),
+  };
+  Object.values(panels).forEach(p => p.classList.remove('mobile-active'));
+  panels[tab]?.classList.add('mobile-active');
+  document.querySelectorAll('.mnav-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === tab)
+  );
+}
+
+function mobileUpdateBadge(count) {
+  const badge = document.getElementById('mnavBadge');
+  if (!badge) return;
+  if (count > 0) { badge.textContent = count; badge.style.display = ''; }
+  else           { badge.style.display = 'none'; }
+}
+
 // ── CHANNELS ──────────────────────────────────────────────────────────────────
 
 function selectChannel(el, channel) {
@@ -430,6 +528,7 @@ function selectChannel(el, channel) {
   document.getElementById('panelTitle').textContent = channel;
   document.getElementById('btnRewriteAll').style.display = '';
   loadChannel(channel);
+  if (isMobile()) mobileTab('posts');
 }
 
 async function loadChannel(channel) {
@@ -443,6 +542,7 @@ async function loadChannel(channel) {
     list.innerHTML = posts.length
       ? posts.map(renderCard).join('')
       : '<div class="empty-state"><div class="empty-icon">◎</div><p>Немає постів у цьому каналі</p></div>';
+    mobileUpdateBadge(posts.filter(p => p.status === 'новий').length);
   } catch {
     list.innerHTML = '<div class="empty-state"><p>Помилка завантаження</p></div>';
   }
@@ -543,6 +643,7 @@ function myChOpenEditor() {
   ta.readOnly         = false;
   clearPoll();
   syncEditorBtns();
+  if (isMobile()) mobileTab('editor');
 }
 
 // ── POST CARDS ────────────────────────────────────────────────────────────────
@@ -694,6 +795,7 @@ function openCardInEditor(id) {
   document.getElementById('pollOpt3').value = opts[2] || '';
   document.getElementById('pollOpt4').value = opts[3] || '';
   syncEditorBtns();
+  if (isMobile()) mobileTab('editor');
 }
 
 function syncEditorBtns() {
@@ -937,6 +1039,12 @@ function toast(msg, type='success') {
 
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('editorTextarea').addEventListener('input', syncEditorBtns);
+
+  // Ініціалізація мобільного режиму
+  if (isMobile()) {
+    mobileTab('channels');
+  }
+
   const first = document.querySelector('.channel-item');
   if (first) first.click();
 });
