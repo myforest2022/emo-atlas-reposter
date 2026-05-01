@@ -20,7 +20,7 @@ from flask import (
     request, send_from_directory, jsonify
 )
 
-from db.database import get_connection
+from db.database import get_connection, init_db
 from ai.rewrite import rewrite_text, save_rewritten
 from bot.publish import publish_post, mark_as_published
 
@@ -32,6 +32,9 @@ CONFIG_PATH = os.path.join(ROOT_DIR, "config.py")
 
 app = Flask(__name__, template_folder="templates")
 app.secret_key = "reposter-panel-secret"
+
+with app.app_context():
+    init_db()
 
 # ─── Кольори аватарів каналів ─────────────────────────────────────────────────
 
